@@ -1,0 +1,262 @@
+1. Use the given link Data Set:https://archive.ics.uci.edu/ml/datasets/Yeast
+Answer the below questions:
+
+
+a. Visualize the correlation between all variables in a meaningful and clear way of representing. Find out top 3 reasons for having more crime in a city.
+
+
+COBRA_YTD2017<-read.csv('D:/R/COBRA-YTD2017.csv') 
+require(Amelia)
+library(Rcpp) 
+data<-COBRA_YTD2017 
+data[4:10,3] <- rep(NA,7) 
+data[1:5,4] <- NA 
+data <- data[-c(5,6)] 
+summary(data)
+str(COBRA_YTD2017)
+library(car)
+pMiss <- function(x){sum(is.na(x))/length(x)*100}
+apply(data,2,pMiss)
+apply(data,1,pMiss)
+library(mice)
+md.pattern(data)
+library(VIM)
+aggr_plot <- aggr(data, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(data), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+marginplot(data[c(1,2)])
+
+# Below charts provide the visualization of missing data in the data set
+m <- matrix(data=cbind(rnorm(30, 0), rnorm(30, 2), rnorm(30, 5)), nrow=30, ncol=3)
+apply(m, 1, mean)
+
+apply(m, 2, function(x) length(x[x<0]))
+
+apply(m, 2, function(x) is.matrix(x))
+
+apply(m, 2, is.vector)
+
+apply(m, 2, function(x) mean(x[x>0]))
+
+sapply(1:3, function(x) x^2)
+
+lapply(1:3, function(x) x^2)
+
+sapply(1:3, function(x) mean(m[,x]))
+
+sapply(1:3, function(x, y) mean(y[,x]), y=m)
+
+library(tidyverse)
+library(ggmap)
+library(readxl)
+library(kableExtra)
+library(knitr)
+
+str(COBRA_YTD2017)
+
+COBRA_YTD2017$long <- COBRA_YTD2017$x %>%
+  as.numeric()
+
+COBRA_YTD2017$lat <- COBRA_YTD2017$y %>%
+  as.numeric()
+
+COBRA_YTD2017$loc_type <- COBRA_YTD2017$UC2.Literal %>%   as.factor()
+
+COBRA_YTD2017$days <- COBRA_YTD2017$Avg.Day %>%
+  as.factor()
+
+kable(count(COBRA_YTD2017, loc_type, sort=TRUE), "html", col.names=c("Crime Type", "Frequency")) %>%
+kable_styling(bootstrap_options="striped", full_width=FALSE)
+
+#HTML Output
+
+# Crime Type 		Frequency 
+# LARCENY-FROM VEHICLE 	9840 
+# LARCENY-NON VEHICLE 	6589 
+# AUTO THEFT 		3197 
+# BURGLARY-RESIDENCE 	2635 
+# AGG ASSAULT 		2024 
+# ROBBERY-PEDESTRIAN 	1126 
+# BURGLARY-NONRES 	758 
+# RAPE 			226 
+# ROBBERY-COMMERCIAL 	157 
+# ROBBERY-RESIDENCE 	132 
+# HOMICIDE 		75  
+
+COBRA_YTD2017 %>%
+
+  group_by(days, loc_type) %>%
+
+  summarize(freq=n()) %>%
+
+  ggplot(aes(reorder(days, -freq), freq)) +   
+
+  geom_bar(aes(fill=loc_type), position="dodge", stat="identity", width=0.8, color="black") +
+  xlab("Day of Week") +
+  ylab("Frequency") +
+  labs(fill="Crime Type") +
+  ggtitle("Crime by Day of the Week")
+
+
+#The data provides crime type frequency and crime by day of the week.
+
+#Among the high crime categories, larceny tend to increase on Fridays and Saturdays. while burglary residence generally occurred more often during the weekdays than the weekends. Auto theft were least reported on Thursdays and increase for the weekends.
+
+atlanta_map <- qmap("atlanta",
+                    zoom=12,
+                    source="stamen",
+                    maptype="toner",
+                    color="bw")
+
+
+library(dplyr)
+library(data.table)
+library(ggplot2)
+at <- COBRA_YTD2017
+str(at)
+at$MI_PRINX <- at$apt_office_prefix <- at$apt_office_num <- at$location <- at$dispo_code <- at$loc_type <- at$npu <- NULL
+
+library(chron)
+library(lubridate)
+at$lon <- at$x
+at$lat <- at$y
+at$occur_date <- mdy(at$occur_date)
+at$rpt_date <- mdy(at$rpt_date)
+at$occur_time <- chron(times=at$occur_time)
+at$lon <- as.numeric(at$lon)
+at$lat <- as.numeric(at$lat)
+at$x <- at$y <- NULL
+
+library(xts)
+by_Date <- na.omit(at) %>% group_by(occur_date) %>% summarise(Total = n())
+tseries <- xts(by_Date$Total, order.by= by_Date$occur_date)
+
+library(highcharter)
+hchart(tseries, name = "Crimes") %>% 
+  hc_add_theme(hc_theme_darkunica()) %>%
+  hc_credits(enabled = TRUE, text = "Sources: Atlanta Police Department", style = list(fontSize = "12px")) %>%
+  hc_title(text = "Time Series of Atlanta Crimes") %>%
+  hc_legend(enabled = TRUE)
+
+at$dayofWeek <- weekdays(as.Date(at$occur_date))
+at$hour <- sub(":.*", "", at$occur_time)
+at$hour <- as.numeric(at$hour)
+ggplot(aes(x = hour), data = at) + geom_histogram(bins = 24, color='white', fill='black') +
+  ggtitle('Histogram of Crime Time') 
+
+
+#Downtown and midtown are the most common locations where crimes take place, followed by Old Fourth Ward and West End. 
+
+topLocations <- subset(at, neighborhood =="Downtown"|neighborhood =="Midtown" | neighborhood=="Old Fourth Ward" | neighborhood=="West End" | neighborhood=="Vine City" | neighborhood=="North Buckhead")
+topLocations <- within(topLocations,  neighborhood <- factor(neighborhood, levels = names(sort(table(neighborhood), decreasing = T))))
+topLocations$days <- ordered(topLocations$days, 
+                                   levels = c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'))
+ggplot(data = topLocations, aes(x = days, fill = neighborhood)) + 
+  geom_bar(width = 0.9, position = position_dodge()) + ggtitle(" Top Crime Neighborhood by Days") + 
+  labs(x = "Days", y = "Number of crimes", fill = guide_legend(title = "Neighborhood")) + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#among the high crime categories, larceny tend to increase on Fridays and Saturdays. while burglary residence generally occurred more often during the weekdays than the weekends. Auto theft were least reported on Thursdays and increase for the weekends.
+
+
+
+
+
+
+
+
+b. What is the difference between co-variance and correlation? Take an example from this dataset and show the differences if any?
+
+
+Covariance and Correlation are two mathematical concepts which are quite commonly used in business statistics. Both of these two determine the relationship and measures the dependency between two random variables. Despite, some similarities between these two mathematical terms, they are different from each other. Correlation is when the change in one item may result in the change in another item.
+
+Correlation is considered as the best tool for for measuring and expressing the quantitative relationship between two variables in formula. On the other hand, covariance is when two items vary together. 
+
+        BASIS FOR COMPARISON	       COVARIANCE	            CORRELATION
+
+
+             Meaning	        Covariance is a measure         Correlation is a statistical 
+                              indicating the extent to          measure that indicates how
+                               which two random variables        strongly two variables
+                                 change in tandem.	                 are related.
+ 
+
+             What is it?	Measure of correlation	       Scaled version of covariance
+
+
+               Values	        Lie between -8 and +8	       Lie between -1 and +1
+
+
+          Change in scale	Affects covariance	       Does not affects correlation
+
+
+          Unit free measure	         No	                     Yes
+
+_____________________________________________________________________________________________
+
+                                                                                                  
+                                                 Cov(X,Y)
+    Covariance vs. Correlation           ?(X,Y)= ________
+                                                 sX  sY 
+
+             Where:
+
+                   ?(X,Y) – the correlation between the variables X and Y
+                   Cov(X,Y) – the covariance between the variables X and Y
+                   sX – the standard deviation of the X-variable
+                   sY – the standard deviation of the Y-variable
+
+Both measures only linear relationship between two variables, i.e. when the correlation coefficient is zero, covariance is also zero. Further, the two measures are unaffected by the change in location.
+
+Correlation is a special case of covariance which can be obtained when the data is standardized. Now, when it comes to making a choice, which is a better measure of the relationship between two variables, correlation is preferred over covariance, because it remains unaffected by the change in location and scale, and can also be used to make a comparison between two pairs of variables.
+
+Take an example from this dataset and show the differences if any? 
+
+#Correlation & covariance
+
+cor(COBRA_YTD2017$x,COBRA_YTD2017$y)
+cov(COBRA_YTD2017$x,COBRA_YTD2017$y)
+cor.test(COBRA_YTD2017$x,COBRA_YTD2017$y)
+cor(COBRA_YTD2017$long,COBRA_YTD2017$lat)
+cor.test(COBRA_YTD2017$long,COBRA_YTD2017$lat)
+cov(COBRA_YTD2017$long,COBRA_YTD2017$lat)
+plot(COBRA_YTD2017$x,COBRA_YTD2017$y)
+mod=lm(COBRA_YTD2017$long~COBRA_YTD2017$lat)
+summary(mod)
+predict(mod)
+pred= predict(mod)
+COBRA_YTD2017$predicted=NA
+COBRA_YTD2017$predicted=pred
+COBRA_YTD2017$error=COBRA_YTD2017$residuals
+library(car)
+dwt(mod)
+plot(COBRA_YTD2017$long,COBRA_YTD2017$lat,abline(COBRA_YTD2017$long~COBRA_YTD2017$lat),col='red')
+
+[1] -0.9998355
+[1] -23.86342
+
+	Pearson's product-moment correlation
+
+data:  COBRA_YTD2017$x and COBRA_YTD2017$y
+t = -9017.2, df = 26757, p-value < 2.2e-16
+alternative hypothesis: true correlation is not equal to 0
+95 percent confidence interval:
+ -0.9998394 -0.9998315
+sample estimates:
+       cor 
+-0.9998355 
+
+[1] -0.9998355
+
+	Pearson's product-moment correlation
+
+data:  COBRA_YTD2017$long and COBRA_YTD2017$lat
+t = -9017.2, df = 26757, p-value < 2.2e-16
+alternative hypothesis: true correlation is not equal to 0
+95 percent confidence interval:
+ -0.9998394 -0.9998315
+sample estimates:
+       cor 
+-0.9998355 
+
+
+lag Autocorrelation D-W Statistic p-value
+   1      0.02809992      1.943799       0
+ Alternative hypothesis: rho != 0
